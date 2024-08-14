@@ -1,30 +1,34 @@
-# React + TypeScript + Vite
+# Thekr - Prayer Reminder
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**Thekr - Prayer Reminder** is a Chrome extension designed to keep you updated with daily prayer times based on your location. It provides timely notifications for each prayer, helping you stay on track with your spiritual routine.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Daily Prayer Times**: Automatically fetches prayer times daily based on your city.
+- **Prayer Time Notifications**: Get a notification as soon as a prayer time starts.
+- **24/12-Hour Format**: Switch between 24-hour and 12-hour formats.
+- **Language Support**: Supports both Arabic and English languages.
+- **Cross-Browser Compatibility**: Built on the Chrome API, it supports multiple browsers including Chrome and Microsoft Edge.
+- **Available on Chrome Web Store and Microsoft Edge Add-ons**: Easily accessible on major platforms.
 
-## Expanding the ESLint configuration
+## Installation
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+You can install the extension directly from the following platforms:
+- [Chrome Web Store](#)
+- [Microsoft Edge Add-ons](#)
 
-- Configure the top-level `parserOptions` property like this:
+## Usage
 
-```js
-export default {
-  // other rules...
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json', './tsconfig.app.json'],
-    tsconfigRootDir: __dirname,
-  },
-}
-```
+1. Install the extension from the Chrome Web Store or Microsoft Edge Add-ons.
+2. Once installed, click on the extension icon to open the interface.
+3. Select your city, and the extension will automatically fetch the prayer times for that day.
+4. Toggle between 24-hour and 12-hour formats, and switch the language between Arabic and English as per your preference.
+5. Enable notifications to receive reminders for each prayer time.
 
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+## Contributing
+
+Contributions are welcome! Please fork this repository, make your changes, and submit a pull request.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
