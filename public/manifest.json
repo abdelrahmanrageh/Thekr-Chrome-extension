@@ -1,14 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Thekr - Prayer Reminder",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Get Prayer times reminder based on your city, Pop-up notification reminder each prayer",
   "background": {
     "service_worker": "background.js"
   },
   "permissions": [
-    "storage",
-    "tabs"
+    "storage"
   ],
   "host_permissions": ["https://*/*", "http://*/*"],
   "action": {
@@ -26,5 +25,8 @@
       "js": ["contentScript.js"],
       "run_at": "document_start"
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }

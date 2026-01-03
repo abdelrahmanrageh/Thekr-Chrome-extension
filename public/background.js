@@ -1,11 +1,11 @@
 let prayerTimes = {};
 let notifyMessage;
-let intervalId;
 let arLanguage;
-let notifiedTimes = {};
 let latitude;
 let longitude;
+let method;
 
+// get data from storage
 function getData() {
   chrome.storage.local.get(
     [
@@ -26,9 +26,6 @@ function getData() {
       if (data.arLanguage !== undefined) {
         arLanguage = data.arLanguage;
       }
-      if (data.notifiedTimes) {
-        notifiedTimes = data.notifiedTimes;
-      }
       if (data.latitude) {
         latitude = data.latitude;
       }
@@ -43,19 +40,18 @@ function getData() {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set({ arLanguage: true });
   chrome.storage.local.set({ notifyMessage: false });
-  chrome.storage.local.set({ latitude: 30.8760568 });
-  chrome.storage.local.set({ longitude: 29.742604 });
+  chrome.storage.local.set({ latitude: 21.42664 });
+  chrome.storage.local.set({ longitude: 39.82563 });
 
   getData();
   fetchPrayerTimes();
-  checkPrayerTimes();
+  // checkPrayerTimes();
 });
 
 // Fetch settings and notified times on startup
 chrome.runtime.onStartup.addListener(() => {
   getData();
   fetchPrayerTimes();
-  checkPrayerTimes();
 });
 
 // Fetch prayer times from API
@@ -70,7 +66,9 @@ async function fetchPrayerTimes() {
 
     if (latitude && longitude) {
       const res = await fetch(
-        `https://api.aladhan.com/v1/timings/${date}?latitude=${latitude}&longitude=${longitude}&method=5`
+        `https://api.aladhan.com/v1/timings/${date}?latitude=${latitude}&longitude=${longitude}${
+          method ? `&method=${method}` : ""
+        }`
       );
       const data = await res.json();
       const { Fajr, Dhuhr, Asr, Maghrib, Isha } = await data.data.timings;
@@ -99,6 +97,10 @@ chrome.runtime.onMessage.addListener((message) => {
     arLanguage = message.arLanguage;
     chrome.storage.local.set({ arLanguage });
   }
+  if (message.type === "SET_METHOD") {
+    method = message.method;
+    chrome.storage.local.set({ method });
+  }
   if (message.type === "SET_CITY") {
     if (message.latitude && message.longitude) {
       latitude = message.latitude;
@@ -108,138 +110,9 @@ chrome.runtime.onMessage.addListener((message) => {
       fetchPrayerTimes();
     }
   }
-
-  checkPrayerTimes();
 });
 
-// Send message to content script to show alert
-function getPrayerTime(currentTime) {
-  Object.entries(prayerTimes).forEach(([prayerName, prayerTime]) => {
-    if (
-      currentTime === prayerTime &&
-      notifiedTimes[prayerName] !== currentTime
-    ) {
-      let message = `It's time for ${prayerName} prayer`;
-      if (arLanguage) {
-        let arabicPrayerName = prayerName;
-        switch (prayerName) {
-          case "Fajr":
-            arabicPrayerName = "الفجر";
-            break;
-          case "Dhuhr":
-            arabicPrayerName = "الظهر";
-            break;
-          case "Asr":
-            arabicPrayerName = "العصر";
-            break;
-          case "Maghrib":
-            arabicPrayerName = "المغرب";
-            break;
-          case "Isha":
-            arabicPrayerName = "العشاء";
-            break;
-        }
-        message = `حان الآن موعد صلاة ${arabicPrayerName}`;
-      }
-
-      chrome.tabs.query({}, (tabs) => {
-        tabs.forEach((tab) => {
-          // Ensure we are not sending messages to chrome:// or edge:// pages
-          if (
-            !tab.url.startsWith("chrome://") &&
-            !tab.url.startsWith("edge://")
-          ) {
-            chrome.tabs.sendMessage(
-              tab.id,
-              {
-                type: "SHOW_ALERT",
-                message: message,
-              },
-              () => {
-                if (chrome.runtime.lastError) {
-                  console.log(
-                    "Error sending message to content script:",
-                    chrome.runtime.lastError
-                  );
-                } else {
-                  notifiedTimes[prayerName] = currentTime;
-                  chrome.storage.local.set({ notifiedTimes });
-                }
-              }
-            );
-          }
-        });
-      });
-    }
-  });
-}
-
-// Check prayer times every 25 seconds
-const checkPrayerTimes = () => {
-  if (intervalId) {
-    clearInterval(intervalId);
-  }
-
-  if (notifyMessage) {
-    intervalId = setInterval(() => {
-      const now = new Date();
-      const hours = String(now.getHours()).padStart(2, "0");
-      const minutes = String(now.getMinutes()).padStart(2, "0");
-      const currentTime = `${hours}:${minutes}`;
-
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (
-          tabs[0] &&
-          !tabs[0].url.startsWith("chrome://") &&
-          !tabs[0].url.startsWith("edge://")
-        ) {
-          getPrayerTime(currentTime);
-        } else {
-          console.log(
-            "Skipping tab with URL:",
-            tabs[0] ? tabs[0].url : "No tab"
-          );
-        }
-      });
-    }, 20000);
-  }
-};
-
-// Reset notified times at midnight
-const resetNotifiedTimes = () => {
-  const now = new Date();
-  const msUntilMidnight =
-    new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0) -
-    now;
-
-  setTimeout(() => {
-    notifiedTimes = {};
-
-    chrome.storage.local.set(
-      {
-        notifiedTimes: {},
-        notified_الظهر: "",
-        notified_العصر: "",
-        notified_المغرب: "",
-        notified_العشاء: "",
-        notified_الفجر: "",
-      },
-      () => {
-        // Error handling for storage operation
-        if (chrome.runtime.lastError) {
-          console.log(
-            "Error resetting notified times:",
-            chrome.runtime.lastError
-          );
-        } else {
-          // Recursively call resetNotifiedTimes to set up the next midnight reset
-          resetNotifiedTimes();
-        }
-      }
-    );
-  }, msUntilMidnight);
-};
-
-// Initialize
-resetNotifiedTimes();
-checkPrayerTimes();
+chrome.runtime.onUpdateAvailable.addListener(() => {
+  chrome.tabs.create({ url: "https://thekr.vercel.app/update" });
+  chrome.runtime.reload();
+});
