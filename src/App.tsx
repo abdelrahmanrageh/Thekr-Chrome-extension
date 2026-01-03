@@ -2,11 +2,17 @@ import "./App.css";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import icon from "../public/icons/icon128.png";
-import {
-  egyptCitiesCoordinates,
-  // egyptCitiesCoordinates,
-  egyptCitiesCoordinatesArabic,
-} from "./governorates";
+import { methodsArray, arMethodsArray } from "./methods";
+import cities from "./cities.json";
+
+const citiesArray = cities as CityInof[];
+
+type CityInof = {
+  name: string;
+  alternate_names: string[];
+  latitude: string;
+  longitude: string;
+};
 
 type PryerTimes = {
   Fajr: string;
@@ -19,14 +25,15 @@ type PryerTimes = {
 function App() {
   const [fullDate, setFullDate] = useState("");
   const [latitude, setLatitude] = useState(
-    +window.localStorage.getItem("latitude")! || 30.8760568
+    +window.localStorage.getItem("latitude")! || 21.42664
   );
   const [longitude, setLongitude] = useState(
-    +window.localStorage.getItem("longitude")! || 29.742604
+    +window.localStorage.getItem("longitude")! || 39.82563
   );
   const [city, setCity] = useState(
-    window.localStorage.getItem("city") || "Alexandria"
+    window.localStorage.getItem("city") || "Mecca, SA"
   );
+
   const [prayerTimes, setPrayerTimes] = useState<PryerTimes>(
     JSON.parse(window.localStorage.getItem("prayerTimes")!) ?? {}
   );
@@ -36,21 +43,13 @@ function App() {
   const [arLanguage, setArLanguage] = useState(
     JSON.parse(window.localStorage.getItem("arLanguage")!) ?? true
   );
-  const [cities, setCities] = useState(egyptCitiesCoordinatesArabic);
-
   const [notifyMessage, setNotifyMessage] = useState(
     JSON.parse(window.localStorage.getItem("notifyMessage")!) ?? false
   );
-  // const [sound, setSound] = useState(
-  //   JSON.parse(window.localStorage.getItem("sound")!) ?? false
-  // );
+  const [method, setMethod] = useState(
+    window.localStorage.getItem("method") || 0
+  );
   const [nextPrayer, setNextPrayer] = useState("");
-
-  useEffect(() => {
-    arLanguage
-      ? setCities(egyptCitiesCoordinatesArabic)
-      : setCities(egyptCitiesCoordinates);
-  }, [arLanguage]);
 
   useEffect(() => {
     const date = new Date();
@@ -61,17 +60,16 @@ function App() {
     setFullDate(fullDate);
   }, []);
 
-  // getting prayer times on change
   useEffect(() => {
-    if (latitude && longitude && fullDate) {
-      getPrayerTimes(fullDate, latitude, longitude);
-    }
-  }, [fullDate]);
-
-  useEffect(() => {
+    chrome.runtime.sendMessage({ type: "SET_CITY", latitude, longitude });
     if (latitude && longitude && fullDate)
       getPrayerTimes(fullDate, latitude, longitude);
   }, [latitude, longitude, fullDate]);
+  
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: "SET_NOTIFY_MESSAGE", notifyMessage });
+    chrome.runtime.sendMessage({ type: "SET_LANGUAGE", arLanguage });
+  } , [notifyMessage, arLanguage]);
 
   // setting next prayer
   useEffect(() => {
@@ -89,46 +87,93 @@ function App() {
     }
   }, [prayerTimes, fullDate]);
 
+  // fetching prayer times
   async function getPrayerTimes(
     date: string,
     latitude: number,
-    longitude: number
+    longitude: number,
+    methodBool?: boolean
   ) {
+    if (!latitude || !longitude || !date) return;
     try {
       const res = await axios.get(
-        `https://api.aladhan.com/v1/timings/${date}?latitude=${latitude}&longitude=${longitude}&method=5`
+        `https://api.aladhan.com/v1/timings/${date}?latitude=${latitude}&longitude=${longitude}${
+          method ? `&method=${method}` : ""
+        }`
       );
+
+      // getting prayer times from the response
       const { Fajr, Dhuhr, Asr, Maghrib, Isha } = await res.data.data.timings;
-      // console.log(res.data.data.timings);
-      // const timings = {
-      //   Fajr: "10:39",
-      //   Dhuhr: "10:40",
-      //   Asr: "10:41",
-      //   Maghrib: "10:42",
-      //   Isha: "10:43",
-      // };
       const timings = { Fajr, Dhuhr, Asr, Maghrib, Isha };
-      // console.log(timings);
+
+      // getting prayer time method from the response
+      const returnedMethod = await res?.data?.data?.meta?.method?.id;
+      if (!methodBool) {
+        setMethod(returnedMethod);
+        window.localStorage.setItem("method", returnedMethod);
+        chrome.runtime.sendMessage({
+          type: "SET_METHOD",
+          method: returnedMethod,
+        });
+      }
 
       setPrayerTimes(timings);
       window.localStorage.setItem("prayerTimes", JSON.stringify(timings));
+      chrome.runtime.sendMessage({
+        type: "SET_PRAYER_TIMES",
+        prayerTimes: timings,
+      });
 
-      if (notifyMessage) {
-        chrome.runtime.sendMessage({
-          type: "SET_PRAYER_TIMES",
-          prayerTimes: timings,
-        });
-        chrome.storage.local.set({ prayerTimes: timings });
-      }
     } catch (err) {
       console.log(err);
     }
   }
 
-  // 24-hour button // done
-  // notification button on-off // done
-  // sound on-off
-  // language button // done
+  // search cities function
+  const [filteredCities, setFilteredCities] = useState<CityInof[] | null>(null);
+  let timeout: number;
+  function searchCities(search: string) {
+    setCity(search);
+    if (!search) {
+      setFilteredCities(null);
+      return;
+    }
+    clearTimeout(timeout);
+
+    timeout = setTimeout(() => {
+      const filtered: CityInof[] = [];
+      citiesArray.forEach((city) => {
+        if (city.name.toLowerCase().startsWith(search.toLowerCase())) {
+          filtered.push(city);
+        }
+      });
+      citiesArray.forEach((city) => {
+        if (filtered.length > 15) return;
+        if (filtered.includes(city)) return;
+        if (city.name.toLowerCase().includes(search.toLowerCase())) {
+          filtered.push(city);
+        } else if (
+          city.alternate_names.some((name) =>
+            name.toLowerCase().includes(search.toLowerCase())
+          )
+        ) {
+          filtered.push(city);
+        }
+      });
+      setFilteredCities(filtered);
+    }, 300);
+  }
+
+  // setting method on change
+  useEffect(() => {
+    window.localStorage.setItem("method", `${method}`);
+    getPrayerTimes(fullDate, latitude, longitude);
+    chrome.runtime.sendMessage({
+      type: "SET_METHOD",
+      method: method,
+    });
+  }, [method]);
+  const [restart, setRestart] = useState(false);
 
   return (
     <>
@@ -138,7 +183,7 @@ function App() {
           <div className="flex flex-col">
             {/* Language button */}
             <button
-              className="bg-blue-95 text-[#fae3bb] my-1"
+              className="bg-blue-95 dark:text-[#fae3bb] text-[#dea033] my-1"
               onClick={() => {
                 const newLanguage = !arLanguage;
                 setArLanguage(newLanguage);
@@ -157,7 +202,7 @@ function App() {
 
             {/* 24-hour button */}
             <button
-              className="bg-blue-95 text-[#fae3bb] my-1"
+              className="bg-blue-95 dark:text-[#fae3bb] text-[#dea033]  my-1"
               onClick={() => {
                 setTwentyFourHour(!twentyFourHour);
                 window.localStorage.setItem(
@@ -171,38 +216,57 @@ function App() {
           </div>
         </div>
 
-        {/* Cities dropdown */}
-        <select
-          name="city"
-          className="bg-transparent border-b-2 py-2 cursor-pointer border-gray-400 text-3xl "
-          dir={arLanguage ? "rtl" : "ltr"}
-          onChange={(e) => {
-            const { city, latitude, longitude } = JSON.parse(e.target.value);
-            setCity(city);
-            window.localStorage.setItem("city", city);
-            setLatitude(latitude);
-            setLongitude(longitude);
-            window.localStorage.setItem("latitude", latitude);
-            window.localStorage.setItem("longitude", longitude);
-            chrome.runtime.sendMessage({
-              type: "SET_CITY",
-              latitude,
-              longitude,
-            });
-          }}
-          value={JSON.stringify({ city, latitude, longitude })}
-        >
-          {cities.map((city) => (
-            <option
-              key={city.city}
-              value={JSON.stringify(city)}
-              className="bg-gray-800 text-base font-light "
-            >
-              {city.city}
-            </option>
-          ))}
-        </select>
+        {/* Cities search */}
+        <div className="relative">
+          <input
+            value={city}
+            id="search"
+            name="city-search"
+            type="text"
+            autoComplete="off"
+            // dir={arLanguage ? "rtl" : "ltr"}
+            spellCheck="false"
+            placeholder={arLanguage ? "ابحث عن مدينتك" : "Search for your city"}
+            className="bg-transparent border-0 outline-0  border-b-2 py-2 overflow-ellipsis cursor-text text-gray-700 dark:text-gray-200 border-gray-400 text-2xl w-full"
+            onChange={(e) => searchCities(e.target.value)}
+          />
 
+          {/* Suggested cities on search */}
+          {filteredCities && filteredCities?.length > 0 && (
+            <div className="absolute top-14 w-full pac-container bg-gray-200 max-h-52 overflow-y-scroll">
+              {filteredCities.map((city, index) => {
+                if (index > 15) return; // limiting the number of suggested cities
+                return (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCity(city.name);
+                      window.localStorage.setItem("city", city.name);
+                      setLatitude(parseFloat(city.latitude));
+                      window.localStorage.setItem("latitude", city.latitude);
+                      setLongitude(parseFloat(city.longitude));
+                      window.localStorage.setItem("longitude", city.longitude);
+                      getPrayerTimes(
+                        fullDate,
+                        parseFloat(city.latitude),
+                        parseFloat(city.longitude)
+                      );
+                      setFilteredCities(null);
+                      setMethod(0);
+                      window.localStorage.removeItem("method");
+                    }}
+                    key={`${city.name}-${city.latitude}-${city.longitude}`}
+                    className="text-gray-700 block dark:text-gray-200 w-full text-start pac-item cursor-pointer"
+                  >
+                    {city.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Prayer Times table */}
         {prayerTimes ? (
           <div className="text-xl mt-10 w-full text-left ">
             {Object.entries(prayerTimes).map(([prayerName, prayerTime]) => (
@@ -212,8 +276,10 @@ function App() {
                 className="my-2 flex w-full justify-between"
               >
                 <p
-                  className={`${
-                    nextPrayer === prayerName ? "text-[#fae3bb]" : ""
+                  className={`text-gray-600 dark:text-gray-200 ${
+                    nextPrayer === prayerName
+                      ? "!text-[#dea033] dark:!text-[#fae3bb]"
+                      : ""
                   }`}
                 >
                   {!arLanguage
@@ -231,8 +297,10 @@ function App() {
                     : ""}
                 </p>
                 <p
-                  className={`${
-                    nextPrayer === prayerName ? "text-[#fae3bb]" : ""
+                  className={`text-gray-600 dark:text-gray-200 ${
+                    nextPrayer === prayerName
+                      ? "!text-[#dea033] dark:!text-[#fae3bb]"
+                      : ""
                   }`}
                   dir={"ltr"}
                 >
@@ -249,11 +317,62 @@ function App() {
                 </p>
               </div>
             ))}
+
+            {/* Changing Method */}
+            <div
+              dir={arLanguage ? "rtl" : "ltr"}
+              className="text-gray-600 dark:text-gray-300  border-gray-500 mt-2 text-xs w-full text-start font-light"
+            >
+              {method !== 0 &&
+                (arLanguage ? (
+                  <span className="font-light">المواقيت حسب: </span>
+                ) : (
+                  <span className="font-light">Based on: </span>
+                ))}
+            </div>
+
+            {/* Method selection */}
+            <select
+              className="text-xs cursor-pointer -mt-0 text-start block w-full -ms-1 me-1 font-normal text-gray-600 dark:text-gray-300 bg-transparent"
+              value={method}
+              onChange={(e) => {
+                setMethod(e.target.value);
+              }}
+              name=""
+              dir={arLanguage ? "rtl" : "ltr"}
+            >
+              {arLanguage
+                ? arMethodsArray.map(
+                    (method) =>
+                      method.name !== "" && (
+                        <option
+                          className="text-sm dark:bg-gray-900 text-gray-700 dark:text-gray-400 font-light "
+                          value={method.id}
+                          key={method.id}
+                        >
+                          {method.name}
+                        </option>
+                      )
+                  )
+                : methodsArray.map(
+                    (method) =>
+                      method.name !== "" && (
+                        <option
+                          className="text-sm dark:bg-gray-900 text-gray-700 dark:text-gray-400 font-light "
+                          value={method.id}
+                          key={method.id}
+                        >
+                          {method.name}
+                        </option>
+                      )
+                  )}
+            </select>
+
             <div
               dir={!arLanguage ? "rtl" : "ltr"}
               className="flex flex-col mt-10"
             >
-              <label className="inline-flex justify-between  items-center mb-3 cursor-pointer">
+              <label className="inline-flex justify-between  items-center  mb-3 cursor-pointer">
                 {/* Notification button */}
                 <input
                   onChange={() => {
@@ -268,28 +387,40 @@ function App() {
                       notifyMessage: newNotifyMessage,
                     });
                   }}
+                  onClick={() => {
+                    setRestart(!restart);
+                  }}
                   checked={notifyMessage}
                   type="checkbox"
                   className="sr-only peer"
                 />
+
                 <div
                   dir="ltr"
-                  className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-100 dark:peer-focus:ring-blue-00 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full  peer-checked:after:border-red-300 after:content-[''] after:absolute after:top-[2px] after:start-[2px] peer-checked:after:bg-yellow-900 after:bg-yellow-900 after:border-red-200 after:border after:rounded-full after:w-5 after:h-5 after:transition-all dark:border-yellow-600 peer-checked:bg-[#fae3bb]"
+                  className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-100 dark:peer-focus:ring-blue-00 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full  peer-checked:after:border-red-300 after:content-[''] after:absolute after:top-[2px] after:start-[2px] peer-checked:after:bg-yellow-900 after:bg-yellow-900 after:border-red-200 after:border after:rounded-full after:w-5 after:h-5 after:transition-all dark:border-yellow-600 dark:peer-checked:bg-[#fae3bb] ring-1 ring-yellow-800 dark:ring-0 peer-checked:bg-[#ffd997] "
                 ></div>
                 <span className="ms-3 text-lg font-medium text-gray-900 dark:text-gray-300">
                   {!arLanguage ? "Prayer Notification " : "إشعار الصلاة"}
                 </span>
               </label>
-              <p className="text-gray-500  text-xs text-center font-thin -mt-2">
+
+              {restart && (
+                <p className="ms-3 text-xs text-end  sr-onl font-light text-gray-900 -mt-3 mb-3 dark:text-red-300">
+                  {arLanguage
+                    ? "من فضلك أعد تشغيل المتصفح"
+                    : "Please restart the browser"}
+                </p>
+              )}
+
+              <p className="text-gray-500  text-xs text-center  font-thin -mt-2">
                 {arLanguage
                   ? "يظهر تلقائيا في موعد الصلاة ويختفي بعد دقيقة"
                   : "appears automatically at prayer time, disappears after one minute"}
               </p>
             </div>
           </div>
-        ) :
-        // skeleton
-          (
+        ) : (
+          // skeleton
           <div>
             <div
               dir={arLanguage ? "rtl" : "ltr"}

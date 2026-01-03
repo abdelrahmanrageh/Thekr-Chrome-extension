@@ -17,5 +17,6 @@ module.exports = {
   },
   globals: {
     chrome: 'readonly', // Define `chrome` as a global variable
+    google: 'readonly', // Define `google` as a global variable
   },
 }
