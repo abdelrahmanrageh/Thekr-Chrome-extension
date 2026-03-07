@@ -1,87 +1,52 @@
 // {
-let prayerTimes = {};
 let arLanguage = true;
-let notifyMessage = true;
-let notifiedTimes = {
-  Fajr: false,
-  Dhuhr: false,
-  Asr: false,
-  Maghrib: false,
-  Isha: false,
-};
 
 function updateData() {
   chrome.storage.local.get(
-    ["prayerTimes", "arLanguage", "notifyMessage"],
+    ["arLanguage"],
     (data) => {
-      if (data.prayerTimes) {
-        prayerTimes = data.prayerTimes;
-      }
       if (data.arLanguage !== undefined) {
         arLanguage = data.arLanguage;
-      }
-      if (data.notifyMessage !== undefined) {
-        notifyMessage = data.notifyMessage;
       }
     }
   );
 }
 
-// Looping through the prayer times and checking if the current time matches any of them
-function getPrayerTime(currentTime) {
-  Object.entries(prayerTimes).forEach(([prayerName, prayerTime]) => {
-    if (
-      currentTime === prayerTime
-    ) {
+// Listen for messages from background script
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === "SHOW_PRAYER_NOTIFICATION") {
+    const prayerName = message.prayerName;
+    const useArabic = message.arLanguage;
 
-      let message = `It's time for ${prayerName} prayer`;
-      if (arLanguage) {
-        let arabicPrayerName = prayerName;
-        switch (prayerName) {
-          case "Fajr":
-            arabicPrayerName = "الفجر";
-            break;
-          case "Dhuhr":
-            arabicPrayerName = "الظهر";
-            break;
-          case "Asr":
-            arabicPrayerName = "العصر";
-            break;
-          case "Maghrib":
-            arabicPrayerName = "المغرب";
-            break;
-          case "Isha":
-            arabicPrayerName = "العشاء";
-            break;
-        }
-        message = `حان الآن موعد صلاة ${arabicPrayerName}`;
+    let notificationMessage = `It's time for ${prayerName} prayer`;
+    if (useArabic) {
+      let arabicPrayerName = prayerName;
+      switch (prayerName) {
+        case "Fajr":
+          arabicPrayerName = "الفجر";
+          break;
+        case "Dhuhr":
+          arabicPrayerName = "الظهر";
+          break;
+        case "Asr":
+          arabicPrayerName = "العصر";
+          break;
+        case "Maghrib":
+          arabicPrayerName = "المغرب";
+          break;
+        case "Isha":
+          arabicPrayerName = "العشاء";
+          break;
       }
-      if (notifyMessage) createToasterNotification(message, prayerName);
+      notificationMessage = `حان الآن موعد صلاة ${arabicPrayerName}`;
     }
-  });
-}
 
-// Check prayer times every 20 seconds
-let intervalId;
-const checkPrayerTimes = () => {
-  updateData();
-
-  if (intervalId) {
-    clearInterval(intervalId);
+    createToasterNotification(notificationMessage, prayerName);
   }
+});
 
-  if (notifyMessage) {
-    intervalId = setInterval(() => {
-      const now = new Date();
-      const hours = String(now.getHours()).padStart(2, "0");
-      const minutes = String(now.getMinutes()).padStart(2, "0");
-      const currentTime = `${hours}:${minutes}`;
-
-      getPrayerTime(currentTime);
-    }, 20000);
-  }
-};
-checkPrayerTimes();
+// Initialize
+updateData();
 
 const includeGoogleFont = () => {
   const link = document.createElement("link");
@@ -164,12 +129,12 @@ const createToasterNotification = (message, prayerName) => {
 
   notification.appendChild(closeButton);
   notification.appendChild(document.createTextNode(message));
-  
-  if (container && !notifiedTimes[prayerName]) {
+
+  if (container) {
     container.appendChild(notification);
   } else {
     const retry = () => {
-      if (container && !notifiedTimes[prayerName]) {
+      if (container) {
         container.appendChild(notification);
       } else {
         setTimeout(retry, 1000); // Retry after 1 second
@@ -178,41 +143,22 @@ const createToasterNotification = (message, prayerName) => {
     retry();
   }
 
-  // check if the notification has been added to the DOM
-  if (!notifiedTimes[prayerName]) { 
 
-    // Add notification to the DOM
-    if (document.body) {
-      document.body.appendChild(container);
-      notifiedTimes = {
-        Fajr: false,
-        Dhuhr: false,
-        Asr: false,
-        Maghrib: false,
-        Isha: false,
-      };
-      notifiedTimes[prayerName] = true;
-    }
-    
-    else {
-      console.log("Document body not found, retrying...");
-      const retry = () => {
-        if (document.body) {
-          document.body.appendChild(container);
-          notifiedTimes = {
-            Fajr: false,
-            Dhuhr: false,
-            Asr: false,
-            Maghrib: false,
-            Isha: false,
-          };
-          notifiedTimes[prayerName] = true;
-        } else {
-          setTimeout(retry, 1000); // Retry after 1 second
-        }
-      };
-      retry();
-    }
+  // Add notification to the DOM
+  if (document.body) {
+    document.body.appendChild(container);
+  }
+
+  else {
+    console.log("Document body not found, retrying...");
+    const retry = () => {
+      if (document.body) {
+        document.body.appendChild(container);
+      } else {
+        setTimeout(retry, 1000); // Retry after 1 second
+      }
+    };
+    retry();
   }
 
   // Auto-remove
@@ -223,4 +169,5 @@ const createToasterNotification = (message, prayerName) => {
     }, 500);
   }, 60000);
 };
+
 includeGoogleFont();
