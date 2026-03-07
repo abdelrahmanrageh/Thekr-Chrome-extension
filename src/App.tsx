@@ -50,6 +50,7 @@ function App() {
     window.localStorage.getItem("method") || 0
   );
   const [nextPrayer, setNextPrayer] = useState("");
+  const [remainingTime, setRemainingTime] = useState("");
 
   useEffect(() => {
     const date = new Date();
@@ -65,11 +66,11 @@ function App() {
     if (latitude && longitude && fullDate)
       getPrayerTimes(fullDate, latitude, longitude);
   }, [latitude, longitude, fullDate]);
-  
+
   useEffect(() => {
     chrome.runtime.sendMessage({ type: "SET_NOTIFY_MESSAGE", notifyMessage });
     chrome.runtime.sendMessage({ type: "SET_LANGUAGE", arLanguage });
-  } , [notifyMessage, arLanguage]);
+  }, [notifyMessage, arLanguage]);
 
   // setting next prayer
   useEffect(() => {
@@ -87,6 +88,79 @@ function App() {
     }
   }, [prayerTimes, fullDate]);
 
+  // Calculate remaining time until next prayer
+  useEffect(() => {
+    if (!prayerTimes || Object.keys(prayerTimes).length === 0) return;
+
+    const calculateRemainingTime = () => {
+      const now = new Date();
+      const prayers = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
+
+      let nextPrayerTime: Date | null = null;
+      let nextPrayerName = "";
+      let minDiff = Infinity;
+
+      prayers.forEach((prayer) => {
+        if (prayerTimes[prayer as keyof PryerTimes]) {
+          const [hours, minutes] = prayerTimes[prayer as keyof PryerTimes].split(":").map(Number);
+          const prayerTime = new Date();
+          prayerTime.setHours(hours, minutes, 0, 0);
+
+          let diff = prayerTime.getTime() - now.getTime();
+
+          // If prayer has passed, check tomorrow
+          if (diff < 0) {
+            prayerTime.setDate(prayerTime.getDate() + 1);
+            diff = prayerTime.getTime() - now.getTime();
+          }
+
+          if (diff < minDiff) {
+            minDiff = diff;
+            nextPrayerTime = prayerTime;
+            nextPrayerName = prayer;
+          }
+        }
+      });
+
+      if (nextPrayerTime) {
+        const diffMinutes = Math.floor(minDiff / 60000);
+        const hours = Math.floor(diffMinutes / 60);
+        const minutes = diffMinutes % 60;
+
+        let timeString = "";
+        if (hours > 0) {
+          timeString = arLanguage
+            ? `${hours} ${hours === 1 ? "ساعة" : "ساعات"}${minutes > 0 ? ` و ${minutes} دقيقة` : ""}`
+            : `${hours}h${minutes > 0 ? ` ${minutes}m` : ""}`;
+        } else {
+          timeString = arLanguage
+            ? `${minutes} ${minutes === 1 ? "دقيقة" : "دقيقة"}`
+            : `${minutes} min`;
+        }
+
+        const prayerNameDisplay = arLanguage
+          ? nextPrayerName === "Fajr" ? "الفجر"
+            : nextPrayerName === "Dhuhr" ? "الظهر"
+              : nextPrayerName === "Asr" ? "العصر"
+                : nextPrayerName === "Maghrib" ? "المغرب"
+                  : nextPrayerName === "Isha" ? "العشاء"
+                    : nextPrayerName
+          : nextPrayerName;
+
+        const displayText = arLanguage
+          ? `${prayerNameDisplay} بعد ${timeString}`
+          : `${prayerNameDisplay} in ${timeString}`;
+
+        setRemainingTime(displayText);
+      }
+    };
+
+    calculateRemainingTime();
+    const interval = setInterval(calculateRemainingTime, 1000);
+
+    return () => clearInterval(interval);
+  }, [prayerTimes, arLanguage]);
+
   // fetching prayer times
   async function getPrayerTimes(
     date: string,
@@ -97,8 +171,7 @@ function App() {
     if (!latitude || !longitude || !date) return;
     try {
       const res = await axios.get(
-        `https://api.aladhan.com/v1/timings/${date}?latitude=${latitude}&longitude=${longitude}${
-          method ? `&method=${method}` : ""
+        `https://api.aladhan.com/v1/timings/${date}?latitude=${latitude}&longitude=${longitude}${method ? `&method=${method}` : ""
         }`
       );
 
@@ -276,47 +349,60 @@ function App() {
                 className="my-2 flex w-full justify-between"
               >
                 <p
-                  className={`text-gray-600 dark:text-gray-200 ${
-                    nextPrayer === prayerName
+                  className={`text-gray-600 dark:text-gray-200 ${nextPrayer === prayerName
                       ? "!text-[#dea033] dark:!text-[#fae3bb]"
                       : ""
-                  }`}
+                    }`}
                 >
                   {!arLanguage
                     ? prayerName
                     : prayerName === "Fajr"
-                    ? "الفجر"
-                    : prayerName === "Dhuhr"
-                    ? "الظهر"
-                    : prayerName === "Asr"
-                    ? "العصر"
-                    : prayerName === "Maghrib"
-                    ? "المغرب"
-                    : prayerName === "Isha"
-                    ? "العشاء"
-                    : ""}
+                      ? "الفجر"
+                      : prayerName === "Dhuhr"
+                        ? "الظهر"
+                        : prayerName === "Asr"
+                          ? "العصر"
+                          : prayerName === "Maghrib"
+                            ? "المغرب"
+                            : prayerName === "Isha"
+                              ? "العشاء"
+                              : ""}
                 </p>
                 <p
-                  className={`text-gray-600 dark:text-gray-200 ${
-                    nextPrayer === prayerName
+                  className={`text-gray-600 dark:text-gray-200 ${nextPrayer === prayerName
                       ? "!text-[#dea033] dark:!text-[#fae3bb]"
                       : ""
-                  }`}
+                    }`}
                   dir={"ltr"}
                 >
                   {twentyFourHour
                     ? prayerTime
                     : new Date(`2024-01-01T${prayerTime}`).toLocaleTimeString(
-                        "en-US",
-                        {
-                          hour: "numeric",
-                          minute: "numeric",
-                          hour12: true,
-                        }
-                      )}
+                      "en-US",
+                      {
+                        hour: "numeric",
+                        minute: "numeric",
+                        hour12: true,
+                      }
+                    )}
                 </p>
               </div>
             ))}
+
+            {/* Countdown Display */}
+            {remainingTime && (
+              <div
+                dir={arLanguage ? "rtl" : "ltr"}
+                className="mt-6 mb-4 p-3 bg-gradient-to-r from-yellow-100 to-yellow-200 dark:from-yellow-900/30 dark:to-yellow-800/30 rounded-lg border border-yellow-300 dark:border-yellow-700"
+              >
+                <p className="text-center text-lg font-medium text-gray-800 dark:text-yellow-100">
+                  {arLanguage ? "الصلاة القادمة:" : "Next Prayer:"}
+                </p>
+                <p className="text-center text-2xl font-bold text-yellow-900 dark:text-yellow-200 mt-1">
+                  {remainingTime}
+                </p>
+              </div>
+            )}
 
             {/* Changing Method */}
             <div
@@ -343,29 +429,29 @@ function App() {
             >
               {arLanguage
                 ? arMethodsArray.map(
-                    (method) =>
-                      method.name !== "" && (
-                        <option
-                          className="text-sm dark:bg-gray-900 text-gray-700 dark:text-gray-400 font-light "
-                          value={method.id}
-                          key={method.id}
-                        >
-                          {method.name}
-                        </option>
-                      )
-                  )
+                  (method) =>
+                    method.name !== "" && (
+                      <option
+                        className="text-sm dark:bg-gray-900 text-gray-700 dark:text-gray-400 font-light "
+                        value={method.id}
+                        key={method.id}
+                      >
+                        {method.name}
+                      </option>
+                    )
+                )
                 : methodsArray.map(
-                    (method) =>
-                      method.name !== "" && (
-                        <option
-                          className="text-sm dark:bg-gray-900 text-gray-700 dark:text-gray-400 font-light "
-                          value={method.id}
-                          key={method.id}
-                        >
-                          {method.name}
-                        </option>
-                      )
-                  )}
+                  (method) =>
+                    method.name !== "" && (
+                      <option
+                        className="text-sm dark:bg-gray-900 text-gray-700 dark:text-gray-400 font-light "
+                        value={method.id}
+                        key={method.id}
+                      >
+                        {method.name}
+                      </option>
+                    )
+                )}
             </select>
 
             <div
