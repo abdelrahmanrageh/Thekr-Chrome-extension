@@ -6,6 +6,11 @@ Prayer times are retrieved from the [AlAdhan API](https://aladhan.com/prayer-tim
 
 ## Install from source
 
+You can also install Thekr from the extension stores:
+
+- [Chrome Web Store](https://chromewebstore.google.com/detail/thekr-prayer-reminder/lgflogcipdlfjifkcjjhejjddeheigkh)
+- [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/thekr-prayer-reminder/cejdcadaepbjnabblfhbnlgkoelojfpm)
+
 1. Download or clone this repository.
 2. Run `npm install` and then `npm run build`.
 3. In Chrome, open `chrome://extensions` and enable **Developer mode**.
